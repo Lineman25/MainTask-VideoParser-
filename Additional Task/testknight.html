@@ -1,0 +1,293 @@
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1251">
+<div align="center" id="knightdraw"></div>
+<link rel="stylesheet" type="text/css"
+ href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css">
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.js"></script>
+<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+<style type="text/css">
+ .btnLight {
+  background-color: white;
+  width:  64px;
+  height: 64px;
+ }
+ .btnDark {
+  background-color: black;
+  width:  64px;
+  height: 64px;
+ }
+</style>
+
+<script type="text/javascript">
+ var LOG = 0; //вести ли лог в консоли (Ctrl+Shift+J в Chrome)
+ var SQ_ID = "sID_"; //начало id клеток доски
+ var movesCount = 0; //счётчик ходов
+var nWidth = 8; //размеры доски по умолчанию
+ var nHeight = nWidth; 
+
+ var firstLetterCode = 97; //первый столбец помечается кодом 'a'
+ var xStart, yStart; //стартовая позиция фигуры
+ var xNext, yNext; //следующая позиция фигуры
+ var arrayX = [-2, -1, 1, 2]; //возможные смещения для хода коня
+ var cRadius = 5; //квадрат радиуса клеточной окружности, в которую попадают ходы коня
+
+ var s =  
+  '<form name="knight_data" method="post">'+"\n"+
+  '<table border="0" cellSpacing="2" cellPadding="0" align="center">'+"\n"+"\n"+
+  ' <tr><td align="center">'+"\n"+
+  '  <table id="tableMain" cellSpacing="0" cellPadding="0"></table>'+"\n"+
+  ' </td></tr><tr><td align="center">'+"\n"+
+  ' </td></tr><tr><td align="center">'+"\n"+
+
+  ' <input type="button" value="Очистить" onclick="init();"/>'+"\n"+
+  ' <input type="button" value="Найти" onclick="getSolution();"/>'+"\n"+
+  ' </td></tr>'+"\n"+
+  '</table></form>';
+ document.getElementById('knightdraw').innerHTML = s;
+ function KnightCalc () {} //конструктор объекта конины
+ KnightCalc.prototype.isWayLengthMoreThen1 = false;
+
+ KnightCalc.prototype.isVisited = function (x, y) { 
+  //проверка, посещалась ли клетка 
+  if (!(x>0 && x<=nWidth)) return false;
+  if (!(y>=0 && y<nHeight)) return false;
+  return isVisitedFromObject ($('#' + GetButtonIDString(x, y)));
+ }
+	
+ KnightCalc.prototype.nMovesCalculate = function (x, y) { //количество возможных для хода клеток в(x,y)
+  var nSq = 0;
+  var y0, x0, dY;
+  for (var k = 0; k < arrayX.length; k++) {
+   x0 = x + arrayX[k];
+   dY = Math.sqrt(cRadius - Math.pow(arrayX[k], 2)); //+ или -
+   for (var m = 1; m < 3; m++) {
+    y0 = y + Math.pow(-1, m) * dY;
+    if (this.isVisited(x0, y0)) nSq++;
+   }
+  }
+  return nSq;
+ }
+		
+ KnightCalc.prototype.Calculate = function (x, y) { //вычисление
+  var nMovesAvailable = 8; //количество доступных ходов
+  var nMovesCurrent = 0;
+  var nMovesCount = 0; //счётчик текущих ходов
+  var movesArray = new Array (nMovesAvailable); //массив с ходами
+  var objButton; //кнопка, куда писать ход
+  var y0, x0, dY;
+  for (var k = 0; k < arrayX.length; k++) {
+   x0 = x + arrayX[k];
+   dY = Math.sqrt(cRadius - Math.pow(arrayX[k], 2)); //+ или -
+   for (var m = 1; m < 3; m++) {
+    y0 = y + Math.pow(-1, m) * dY;                
+    if (!this.isVisited (x0, y0)) continue; //вне доски или посещена - пропустить
+    nMovesCount++;
+    movesArray[nMovesCount] = null;
+    nMovesCurrent = this.nMovesCalculate (x0, y0);
+    if (LOG) 
+     console.log ("Возможный ход [" + nMovesCount.toString() + "] = " +  
+      buttonToChessCoord(x0, y0) + ". Вариантов следующего: " + nMovesCurrent.toString());
+    if (nMovesCurrent <= nMovesAvailable) {
+     nMovesAvailable = nMovesCurrent;
+     movesArray[nMovesCount] = { xNew:x0, yNew:y0, nMovesFromNew:nMovesCurrent };
+    }
+   }	
+  }
+  var nOfGoodSteps = 0; 
+  for (var s = 0; s < movesArray.length; s++) { //чистка массива ходов
+   if (movesArray[s] != null) {
+    if (movesArray[s].nMovesFromNew != nMovesAvailable) movesArray[s] = null;
+    else nOfGoodSteps++;                
+   }
+  }
+  var movesArrayCopy = new Array(nOfGoodSteps);
+  var i = 0;
+  for (var k=0; k<movesArray.length; k++) { //скопировать непустые элементы массива ходов
+   if (movesArray[k] != null) movesArrayCopy[i++] = movesArray[k];
+  }
+  this.isWayLengthMoreThen1 = (movesArrayCopy.length > 1);
+  return movesArrayCopy;
+ }
+	    
+ function GetButtonIDString (x, y) { //сформировать id кнопки
+  return (SQ_ID + y.toString() + "_" + x.toString());
+ }
+
+ function createBoard () { //сформировать доску
+  var N0 = 8;
+  if (!isNaN(N0)) {
+   nWidth=N0; nHeight = nWidth; 
+  }
+  var tableMain = $('#tableMain');
+  tableMain.empty();
+  var bColorFlag = true;
+  var currentRow = null;
+  var currentCell = null;
+  var strInnerHTML;
+  for (var i = 0; i <= nHeight; i++) {
+   currentRow = $("<tr>");
+   for (var j = 0; j <= nWidth; j++) {
+    currentCell = $('<td align="center">');
+    if (i==nHeight && j == 0) {	
+     currentRow.append(currentCell);
+     continue;
+    }
+    if (i==nHeight) { //буквы столбцов
+     currentCell.text(String.fromCharCode(firstLetterCode - 1 + j));
+     currentRow.append(currentCell);
+     continue;
+    }
+    if (j==0) { //цифры строк
+     currentCell.html((nHeight - i).toString()+'&nbsp;');
+     currentRow.append(currentCell);
+     continue;
+    }
+    //кнопки клеток доски
+    currentCell.html("<button class='"+(!bColorFlag?'btnDark':'btnLight')+
+     "' id='" + GetButtonIDString(j, i) + "' onclick='OnButtonClick(this);return false;'></button>");  
+    bColorFlag = !bColorFlag;
+    currentRow.append(currentCell);
+   }
+   bColorFlag = (i%2 != 0); 
+   tableMain.append(currentRow);
+  }
+ } 
+    
+ function OnButtonClick (obj) { //обработка клика по доске
+  movesCount++;
+  $(obj).text(movesCount.toString());
+  switchSquares (true);	
+ }
+	
+ function switchSquares (mode) { 
+  //закрыть (mode==true) или открыть клетки после первого клика
+  for (i = 0; i < nHeight; i++)	{
+   for (j = 1; j <= nWidth; j++) {
+    if (mode) $('#' + GetButtonIDString(j, i)).attr ('disabled', '');
+    else $('#' + GetButtonIDString(j, i)).removeAttr ('disabled');					
+   }	
+  }
+ }
+	
+ function getStartCoord () { //найти стартовую позицию коня
+  for (i = 0; i < nHeight; i++)	{
+   for (j = 1; j <= nWidth; j++) {
+    if ($('#' + GetButtonIDString(j, i)).text () == '1') {
+     xStart = j; yStart = i; return;
+    }
+   }	
+  }
+ }
+ function idToChessCoord (obj) { //id кнопки в нотацию поля доски
+  var strID = $(obj).attr("id");
+  var array = strID.split("_");
+  return (String.fromCharCode(firstLetterCode-1+parseInt(array[2])) + "" + 
+   (nHeight-parseInt(array[1])).toString());
+ }
+	
+ function buttonToChessCoord (x, y) { //xy-координаты в нотацию поля доски
+  return (idToChessCoord ($('#' + GetButtonIDString(x, y))));
+ }
+	
+ function init() { //инициализировать данные (кнопка "Очистить")
+  createBoard();
+  for (i = 0; i < nHeight; i++) {
+   for (j = 1; j <= nWidth; j++) {
+    $('#' + GetButtonIDString(j, i)).text ('');
+   }	
+  }
+  switchSquares (false);
+  movesCount = 0;
+ }
+	
+ function isVisitedFromObject(obj) { //посещалась ли клетка в obj (true-нет, false-да)
+  var strSquareText = obj.text ();
+  var bResult = (!(strSquareText != undefined && strSquareText != ''));
+  return bResult;
+ }
+	
+ function markAsVisited (obj, n) { 
+  //пометить клетку n как посещённую и проверить, есть ли решение
+  if (movesCount == (nHeight * nWidth))	{
+   alert("Найдено полное решение");
+   return true;
+  }
+  var bIncompleteFlag = false;
+  if (n != undefined && n == 0 && movesCount == (nHeight * nWidth) - 1)	{
+   if (!isVisitedFromObject (obj)) bIncompleteFlag = true;
+  }
+  else {
+   if (n != undefined && n == 0 && movesCount > 1) bIncompleteFlag = true;
+  }
+  movesCount++;
+  obj.text(movesCount.toString());
+  if (bIncompleteFlag) {
+   alert("Найдено неполное решение! Покрыто клеток: " + movesCount.toString());
+   return true;
+  }
+  return false;	
+ }		    
+ function movesFromOneSquare (x, y) { //Ходы из текущей клетки
+  if (LOG) console.log ("Текущая позиция фигуры: " +  buttonToChessCoord (x, y));
+  var nMovesAvailable = 8;
+  var objKnightCalc = new KnightCalc();
+  var movesArray = objKnightCalc.Calculate (x, y);
+  if (movesArray.length > 0 && movesArray[0].nMovesFromNew == 0) {
+   xNext = movesArray[0].xNew;
+   yNext = movesArray[0].yNew;
+   if (LOG) console.log ("Выполнено");
+   return nMovesAvailable;
+  }
+  var nMovesCurrentLevel2 = 0;
+  var nMovesAvailableLevel2 = 8;
+  var nIndex2 = 0;
+  if (movesArray.length > 1) {
+   if (LOG) console.log ("Переход на уровень 2");
+   var movesArray2;
+   for (var p = 0; p < movesArray.length; p++) {
+    if (movesArray[p] == null) continue;
+    objButton = $('#' + GetButtonIDString(movesArray[p].xNew, movesArray[p].yNew));	
+    objButton.text("v"); //временная пометка клетки
+    movesArray2 = objKnightCalc.Calculate (movesArray[p].xNew, movesArray[p].yNew); 
+    nMovesCurrentLevel2 = movesArray2[0].nMovesFromNew;
+    if (nMovesCurrentLevel2 < nMovesAvailableLevel2) {
+     nMovesAvailableLevel2 = nMovesCurrentLevel2;
+     nIndex2 = p;
+    }
+    objButton.text(""); //убрать пометку
+    movesArray2 = null;
+   }
+  }
+  else if (movesArray.length == 1) {
+   nMovesAvailable = nIndex2 = movesArray[0].nMovesFromNew;
+   xNext = movesArray[0].xNew;
+   yNext = movesArray[0].yNew;
+   if (LOG) console.log ("Выбран следующий ход " +  buttonToChessCoord(xNext, yNext) + 
+     ". Вариантов следующего: " + nMovesAvailable);
+   return nMovesAvailable;
+  }
+  else return 0; 
+  xNext = movesArray[nIndex2].xNew;
+  yNext = movesArray[nIndex2].yNew;
+  if (LOG) console.log ("Выбран следующий ход  " +  buttonToChessCoord(xNext, yNext) + 
+    ". Вариантов следующего: " + nMovesAvailable);
+  return nMovesAvailable;
+ }
+
+ function getSolution(x, y) { //основной метод получения решения
+  if (movesCount == 0) {
+   alert ("Щёлкните по доске для выбора начальной позиции коня и нажмите 'Найти' ещё раз.");
+   return;
+  }
+  if (movesCount == 1) {
+   getStartCoord ();
+   x = xStart;
+   y = yStart;
+  }	
+  var nMovesAvailable = movesFromOneSquare (x, y);
+  var bResult = markAsVisited ($('#' + GetButtonIDString(xNext, yNext)), nMovesAvailable);
+  if (bResult) return; //найдено
+  getSolution(xNext, yNext); //или рекурсия для следующей клетки
+  return;
+ }
+ init();
+</script>
