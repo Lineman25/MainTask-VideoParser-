@@ -3,7 +3,7 @@ const fs = require('fs');
  let savedData = [];
 osmosis
 	.get('https://www.udemy.com/course/learn-flutter-dart-to-build-ios-android-apps/')
-	.find('.title a')
+	.find('.title:first(15)')
 	.set('TITLE:')
      .data(function(data) {
       console.log(data);
